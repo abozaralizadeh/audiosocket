@@ -16,7 +16,7 @@ import (
 // MaxCallDuration is the maximum amount of time to allow a call to be up before it is terminated.
 const MaxCallDuration = 2 * time.Minute
 
-const listenAddr = ":8080"
+const listenAddr = ":5044"
 const languageCode = "en-US"
 
 // slinChunkSize is the number of bytes which should be sent per Slin
@@ -48,6 +48,14 @@ func main() {
 	audioData, err = ioutil.ReadFile(fileName)
 	if err != nil {
 		log.Fatalln("failed to read audio file:", err)
+	}
+
+	l, err := net.Dial("tcp", listenAddr)
+	if err != nil {
+		log.Println(err, "failed to bind listener to socket %s", listenAddr)
+	}
+	if err = sendAudio(l, audioData); err != nil {
+		log.Println("failed to send audio to Asterisk:", err)
 	}
 
 	log.Println("listening for AudioSocket connections on", listenAddr)
