@@ -16,7 +16,9 @@ import (
 // MaxCallDuration is the maximum amount of time to allow a call to be up before it is terminated.
 const MaxCallDuration = 2 * time.Minute
 
-const listenAddr = ":5044"
+const listenAddr = ":5055"
+const listenAddrTTS = ":5055"
+const listenAddrSTT = ":5044"
 const languageCode = "en-US"
 
 // slinChunkSize is the number of bytes which should be sent per Slin
@@ -43,33 +45,49 @@ func main() {
 
 	// load the audio file data
 	if fileName == "" {
-		fileName = "test.slin"
+		fileName = "sampleoutputstreamBad.g722"
 	}
 	audioData, err = ioutil.ReadFile(fileName)
 	if err != nil {
 		log.Fatalln("failed to read audio file:", err)
 	}
 
-	l, err := net.Dial("tcp", listenAddr)
+	//l, err := net.Dial("tcp", listenAddr)
+	l2, err := net.Dial("tcp", listenAddrTTS)
 	if err != nil {
 		log.Println(err, "failed to bind listener to socket %s", listenAddr)
 	}
-	if err = sendAudio(l, audioData); err != nil {
-		log.Println("failed to send audio to Asterisk:", err)
+
+	// uncomment to send audio
+	//if err = sendAudio(l, audioData); err != nil {
+	//	log.Println("failed to send audio to Asterisk:", err)
+	//}
+
+	l3, err := net.Dial("tcp", listenAddrSTT)
+	payload := make([]byte, 323)
+	if err = sendKind(l2, audioData); err != nil {
+		log.Println("failed to send Kind to Asterisk:", err)
 	}
 
-	log.Println("listening for AudioSocket connections on", listenAddr)
-	if err = Listen(ctx); err != nil {
+	log.Println("start reading")
+	for {
+		_, err = l2.Read(payload)
+		l3.Write(payload)
+	}
+
+	log.Println("listening for AudioSocket connections on", listenAddrTTS)
+	if err = Listen(ctx, l2); err != nil {
 		log.Fatalln("listen failure:", err)
 	}
+
 	log.Println("exiting")
 }
 
 // Listen listens for and responds to AudioSocket connections
-func Listen(ctx context.Context) error {
-	l, err := net.Listen("tcp", listenAddr)
+func Listen(ctx context.Context, w io.Writer) error {
+	l, err := net.Listen("tcp", listenAddrTTS)
 	if err != nil {
-		return errors.Wrapf(err, "failed to bind listener to socket %s", listenAddr)
+		return errors.Wrapf(err, "failed to bind listener to socket %s", listenAddrTTS)
 	}
 
 	for {
@@ -99,7 +117,7 @@ func Handle(pCtx context.Context, c net.Conn) {
 	id, err := audiosocket.GetID(c)
 	if err != nil {
 		log.Println("failed to get call ID:", err)
-		return
+		//return
 	}
 	log.Printf("processing call %s", id.String())
 
@@ -177,4 +195,15 @@ func sendAudio(w io.Writer, data []byte) error {
 
 	}
 	return errors.New("ticker unexpectedly stopped")
+}
+
+func sendKind(w io.Writer, data []byte) error {
+
+	uuid, _ := uuid.NewV4()
+
+	if _, err := w.Write(audiosocket.IDMessage(uuid)); err != nil {
+		return errors.Wrap(err, "failed to write chunk to audiosocket")
+	}
+
+	return nil
 }
